@@ -20,9 +20,9 @@ def main():
     # Arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--debug', action="store_true", help='Enable debug mode')
-    parser.add_argument('--dry-run', help='Perform all read operations, and no write operations. This means no bug '
+    parser.add_argument('--dry-run', action="store_true", help='Perform all read operations, and no write operations. This means no bug '
             'will be updated, CASA won\'t be updated, etc.')
-    parser.add_argument('--configfile', action="store_true", help='Config file that specifies all the parameters we need to assign bugs')
+    parser.add_argument('--configfile', help='Config file that specifies all the parameters we need to assign bugs')
 
     args = parser.parse_args()
 
@@ -43,9 +43,9 @@ def main():
         logger.critical("Could not parse configuration file: {}".format(e))
         sys.exit(127)
     bcfg = config.get('bugzilla')
-    bapi = bugzilla.Bugzilla(url=bcfg.get('url'), api_key=os.environ.get['BUGZILLA_API_KEY'])
+    bapi = bugzilla.Bugzilla(url=bcfg.get('url'), api_key=os.environ.get('BUGZILLA_API_KEY'))
 
-    autoassign(bapi, bcfg.get('rra'), args.dry_run)
+    #autoassign(bapi, bcfg.get('rra'), args.dry_run)
     autoassign(bapi, bcfg.get('va'), args.dry_run)
 
 
@@ -82,12 +82,10 @@ def autoassign(bapi, cfg, dry_run):
         bugzilla.DotDict(bugs[-1])
         logger.debug("Found {} unassigned bug(s). Assigning work!".format(len(bugs)))
         for bug in bugs:
-            # Is this a valid rra request bug?
-
-            # TODO: figure out why this is necessary
-            # if bug.get('whiteboard').startswith('autoentry'):
-            #     logger.debug("{} is not an RRA, skipping".format(bug.get('id')))
-            #     continue
+            # Is this a valid request bug?
+            if bug.get('whiteboard').startswith('autoentry'):
+                logger.debug("{} is not valid, skipping".format(bug.get('id')))
+                continue
             # Next assignee in the list, rotate
             if not dry_run:
                 assignee = assign_list.pop()
