@@ -35,3 +35,16 @@ if a bug has been closed, with the correct status. This updates CASA's security 
 "security moderator" privileges.
 
 Note that CASA is short for Contracts and Spends Approval, and runs on biztera.com
+
+## GDrive management
+
+### Service account
+
+To obtain a service account create a Project on GCP, then in the IAM section create a new Service Account with role
+Service Account User. Create a JSON private key for it.
+
+E.g.: https://console.cloud.google.com/iam-admin/serviceaccounts/project?project=risk-assessment-gdrive-manager&organizationId=1047413191847
+
+You'll get a JSON file, that's your credentials. It should contain "type": "service_account", a client_email, a private_key and a bunch of metadata.
+
+NOTE: Make sure you authorize your service email (client_email field) to all the GDrive directories it needs access to! By default it has no access.

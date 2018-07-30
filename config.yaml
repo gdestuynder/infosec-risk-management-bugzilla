@@ -17,7 +17,10 @@ bugzilla:
             - smacleod@mozilla.com
             - culucenk@mozilla.com
         cache: "/tmp/va_assignees.pickle"
-casa:
-    url: "https://biztera.com/api/v1/"
-    lookup_period_in_days: 30
-    bot_email: 'bizbot@biztera.com'
+
+gsuite:
+  drive_id: "18yf69wP9niUzTUSbRC4RYG_yftUiDHbj"
+  template_ids:
+    - rra: "1ATAy_Y1qAJ2xAzzYOHRXxFjfyB9I8bLnTd4vvmJ--OU"
+      data: "1NvqUIwzSGx9bMxEah52ZbCZW-Yaq40eJfAX-9xwbRuI"
+  credentials: risk-assessment-gdrive-manager-ac60333ec819.json

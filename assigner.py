@@ -14,6 +14,8 @@ import pickle
 import requests
 import sys
 import yaml
+from oauth2client.service_account import ServiceAccountCredentials
+from httplib2 import Http
 import os
 
 def _setup_logging(logger = logging.getLogger(__name__), debug=True):
@@ -230,6 +232,7 @@ def autoassign(bapi, cfg, dry_run):
     """
     global logger
 
+    newly_assigned_bugs = []
     reset_assignees = False # Controls if we're going to rewrite the cache that record who's the next assignee or not
     try:
         with open(cfg.get('cache'), 'rb') as f:
@@ -281,6 +284,11 @@ def autoassign(bapi, cfg, dry_run):
                 else:
                     logger.info("Dry run, action not performed: would update bug {} assigning {}".format(bug.get('id'),
                                  assignee))
+
+                # Add to list of processed bugs
+                bug.assigned_to = bug_up.assignee
+                bug.status = bug_up.status
+                newly_assigned_bugs.append(bug)
             except Exception as e:
                 logging.debug("Failed to update bug {}: {}".format(bug.get('id'), e))
 
@@ -290,22 +298,54 @@ def autoassign(bapi, cfg, dry_run):
     with open(cfg.get('cache'), 'wb') as f:
         pickle.dump((assign_list, assign_hash), f)
 
+    return newly_assigned_bugs
+
+
+class GDriveManager(object):
+    def __init__(self, credentials_file, drive_id, template_ids):
+        self.scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly',
+                'https://www.googleapis.com/auth/drive.file ',
+                'https://www.googleapis.com/auth/drive']
+        self.drive_id = drive_id
+        self.template_ids = template_ids
+        self._authorize()
+
+    def _authorize(self):
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(self.credentials_file,
+                                                                       self.scopes)
+        self.http_auth = credentials.authorize(Http())
+        self.drive_service = apiclient.discovery.build('drive', 'v3', http=self.http_auth)
+
+    def create_assessments(self, items):
+        pass
+
 
 def main():
     global logger
     args = _parse_args()
+    bugs = None
     logger = _setup_logging(debug=args.debug)
     config = _load_config(args.configfile)
     bapi = _setup_bugzilla_api(config['bugzilla']['url'])
     capi = _setup_casa_api(config['casa']['url'])
 
+    gdrive_manager = GDriveManager(config['gsuite']['credentials'],
+                                   config['gsuite']['drive_id'],
+                                   config['gsuite']['template_ids'])
+
     modules = args.module.split(',')
     logger.debug('Selected modules to run: {}'.format(modules))
 
     if 'rra' in modules:
-        autoassign(bapi, config['bugzilla']['rra'], args.dry_run)
+        bugs = autoassign(bapi, config['bugzilla']['rra'], args.dry_run)
+
     if 'va' in modules:
-        autoassign(bapi, config['bugzilla']['va'], args.dry_run)
+        bugs = autoassign(bapi, config['bugzilla']['va'], args.dry_run)
+
+    if 'gsuite' in modules and bugs is not None:
+        automanage(bugs, bapi, config['gsuite'], args.dry_run)
+        gdrive_manager.create_assessments(bugs)
+
     if 'casa' in modules:
         autocasa(bapi, capi, config['bugzilla'], config['casa'], args.dry_run)
 
