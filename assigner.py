@@ -44,7 +44,7 @@ def _parse_args(parser=argparse.ArgumentParser()):
     parser.add_argument('-d', '--debug', action="store_true", help='Enable debug mode and prints debug messages')
     parser.add_argument('--dry-run', action="store_true", help='Perform all read operations, and no write operations')
     parser.add_argument('--configfile', default="config.yaml", help='Config file for this program')
-    parser.add_argument('--module', default="va,rra,casa", help='Choose which module to run, such as va, rra, or casa')
+    parser.add_argument('--module', default="va,rra,gsuite,casa", help='Choose which module to run, such as va, rra, or casa')
 
     args = parser.parse_args()
     return args
