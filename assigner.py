@@ -4,8 +4,10 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # Copyright (c) 2016-2018 Mozilla Corporation
-
+from __future__ import absolute_import
 import argparse
+import apiclient.discovery
+import apiclient.http
 import bugzilla
 import casa
 from datetime import datetime, timedelta
@@ -261,6 +263,9 @@ def autoassign(bapi, cfg, dry_run):
 
     try:
         bugzilla.DotDict(bugs[-1])
+    except IndexError:
+        logger.info("No unassigned bugs for component")
+    else:
         logger.debug("Found {} unassigned bug(s). Assigning work!".format(len(bugs)))
         for bug in bugs:
             # Is this a valid request bug?
@@ -286,14 +291,11 @@ def autoassign(bapi, cfg, dry_run):
                                  assignee))
 
                 # Add to list of processed bugs
-                bug.assigned_to = bug_up.assignee
-                bug.status = bug_up.status
+                bug['assigned_to'] = bug_up.assigned_to
+                bug['status'] = bug_up.status
                 newly_assigned_bugs.append(bug)
             except Exception as e:
                 logging.debug("Failed to update bug {}: {}".format(bug.get('id'), e))
-
-    except IndexError:
-        logger.info("No unassigned bugs for component")
 
     with open(cfg.get('cache'), 'wb') as f:
         pickle.dump((assign_list, assign_hash), f)
@@ -302,28 +304,45 @@ def autoassign(bapi, cfg, dry_run):
 
 
 class GDriveManager(object):
-    def __init__(self, credentials_file, drive_id, template_ids):
+    def __init__(self, credentials_file, drive_id, template_ids, logger=None):
+        self.logger = logger or logging.getLogger(__name__)
         self.scopes = ['https://www.googleapis.com/auth/drive.metadata.readonly',
                 'https://www.googleapis.com/auth/drive.file ',
                 'https://www.googleapis.com/auth/drive']
         self.drive_id = drive_id
         self.template_ids = template_ids
-        self._authorize()
+        self._authorize(credentials_file)
+        self._create_api()
 
-    def _authorize(self):
-        credentials = ServiceAccountCredentials.from_json_keyfile_name(self.credentials_file,
+    def _authorize(self, credentials_file):
+        credentials = ServiceAccountCredentials.from_json_keyfile_name(credentials_file,
                                                                        self.scopes)
         self.http_auth = credentials.authorize(Http())
-        self.drive_service = apiclient.discovery.build('drive', 'v3', http=self.http_auth)
+        self.logger.debug('GSuite service authorized')
+
+    def _create_api(self):
+        # This is the API we authorize for: https://developers.google.com/api-client-library/python/apis/drive/v3
+        self.drive_service = apiclient.discovery.build('drive', 'v3', http=self.http_auth, cache_discovery=False)
 
     def create_assessments(self, items):
-        pass
+        """
+        Creates RRA doc from template and assessment data file
+        """
+        if (items is None) or (items == []):
+            self.logger.info('No assessments to create')
+            return
+        self.logger.debug('Creating assessment data')
+        for item in items:
+            self.logger.info('Processing bug request {}: "{}"'.format(item.get('id'), item.get('summary')))
+            # https://developers.google.com/resources/api-libraries/documentation/drive/v3/python/latest/drive_v3.teamdrives.html#get
+            print(dir(self.drive_service))
+            drive = self.drive_service.get(self.drive_id)
 
 
 def main():
     global logger
     args = _parse_args()
-    bugs = None
+    bugs = []
     logger = _setup_logging(debug=args.debug)
     config = _load_config(args.configfile)
     bapi = _setup_bugzilla_api(config['bugzilla']['url'])
@@ -337,18 +356,17 @@ def main():
     logger.debug('Selected modules to run: {}'.format(modules))
 
     if 'rra' in modules:
-        bugs = autoassign(bapi, config['bugzilla']['rra'], args.dry_run)
+        bugs += autoassign(bapi, config['bugzilla']['rra'], args.dry_run)
 
     if 'va' in modules:
-        bugs = autoassign(bapi, config['bugzilla']['va'], args.dry_run)
+        bugs += autoassign(bapi, config['bugzilla']['va'], args.dry_run)
 
     if 'gsuite' in modules and bugs is not None:
-        automanage(bugs, bapi, config['gsuite'], args.dry_run)
+        bugs = [{'priority': '--', 'assigned_to_detail': {'email': 'nobody@mozilla.org', 'real_name': 'Nobody; OK to take it and work on it', 'name': 'nobody@mozilla.org', 'id': 1}, 'blocks': [], 'creator': 'gdestuynder@mozilla.com', 'last_change_time': '2018-10-31T22:37:35Z', 'is_cc_accessible': True, 'keywords': [], 'creator_detail': {'email': 'gdestuynder@mozilla.com', 'real_name': 'Guillaume Destuynder [:kang] (NEEDINFO to ensure replies) (TZ: PST)', 'name': 'gdestuynder@mozilla.com', 'id': 418181}, 'comment_count': 1, 'cf_qa_whiteboard': '', 'cc': [], 'duplicates': [], 'url': '', 'assigned_to': 'gdestuynder@mozilla.com', 'groups': ['mozilla-employee-confidential'], 'see_also': [], 'id': 1483944, 'whiteboard': '', 'creation_time': '2018-08-16T16:08:50Z', 'qa_contact': '', 'depends_on': [], 'mentors': [], 'dupe_of': None, 'cf_fx_iteration': '---', 'resolution': '', 'classification': 'Other', 'alias': None, 'op_sys': 'Linux', 'cf_last_resolved': None, 'cf_fx_points': '---', 'status': 'ASSIGNED', 'cc_detail': [], 'summary': 'test bug', 'cf_user_story': '', 'is_open': True, 'platform': 'x86_64', 'severity': 'normal', 'votes': 0, 'flags': [], 'version': 'unspecified', 'mentors_detail': [], 'component': 'Rapid Risk Analysis', 'is_creator_accessible': True, 'product': 'Enterprise Information Security', 'is_confirmed': True, 'target_milestone': '---'}]
         gdrive_manager.create_assessments(bugs)
 
     if 'casa' in modules:
         autocasa(bapi, capi, config['bugzilla'], config['casa'], args.dry_run)
-
 
 if __name__ == "__main__":
     main()
